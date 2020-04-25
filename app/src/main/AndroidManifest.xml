@@ -20,7 +20,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name=".location.LocationService"
+            android:name=".location.BackgroundLocationService"
             android:enabled="true"
             android:exported="false"
             />

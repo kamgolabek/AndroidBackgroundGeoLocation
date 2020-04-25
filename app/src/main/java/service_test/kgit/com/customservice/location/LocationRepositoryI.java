@@ -1,14 +1,16 @@
 package service_test.kgit.com.customservice.location;
 
-import java.util.List;
+import android.location.Location;
 
-import service_test.kgit.com.customservice.location.db.LocationEntity;
+import java.util.List;
 
 public interface LocationRepositoryI {
 
-    public void insertLocation(final LocationEntity location);
+    public void insertLocation(final Location location);
 
-    public List<LocationEntity> getAllLocations();
+    public List<Location> getAllLocations();
 
-    public List<LocationEntity> getAllLocationWhereTimeBiggerThan(long time);
+    public List<Location> getAllLocationWhereTimeBiggerThan(long time);
+
+    public void clearAll();
 }
