@@ -3,11 +3,18 @@ package service_test.kgit.com.customservice;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
 import service_test.kgit.com.customservice.location.BackgroundLocationService;
 import service_test.kgit.com.customservice.location.MeasureManager;
+import service_test.kgit.com.customservice.location.MeasureState;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -30,71 +37,26 @@ public class MainActivity extends AppCompatActivity {
 
         setWidgets(); // DEMO
         measureService = new MeasureManager(this, 500, 5);
+
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("startDate", new Date());
+        try {
+            measureService.setMeasureData(metadata);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         System.out.println("============ SERVICE RUNNING: " + measureService.getMeasureState());
+
+
     }
-
-
-//    // FLUTTER IMPORTANT
-//
-//    // get all Stored locations...
-//    public void getAllStoredLocations(){
-//        locationService.getLocationRepo().getAllLocations();
-//    }
-//
-//    // get stored locations where time bigger than x
-//    public void getAllStoredLocationsWithTimeBiggerThan(long time){
-//        locationService.getLocationRepo().getAllLocationWhereTimeBiggerThan(time);
-//    }
-//
-//    //
-//
-//    // FLUTTER IMPORTANT
-//    private void startServ(){
-//        if (this.checkSelfPermission( ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-//            final Intent intent = new Intent(this.getApplication(), BackgroundLocationService.class);
-//            startService(intent);
-//            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-//        } else {
-//            this.requestPermissions( new String[]{ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
-//        }
-//    }
-//
-//
-//    // FLUTTER IMPORTANT
-//    private void pauseServ(){
-//        this.locationService.pauseLocationTracking();
-//    }
-//
-//    // FLUTTER IMPORTANT
-//    private void startLocationTracking(){
-//        this.locationService.startLocationTracking();
-//    }
-//
-//
-//    // FLUTTER IMPORTANT
-//    void stopServ(){
-//        try {
-//            unbindService(serviceConnection);
-//        }catch (IllegalArgumentException ex){
-//            System.out.println("service already unbinded");
-//        }
-//
-//        stopService(new Intent(this.getApplication(), BackgroundLocationService.class));
-//    }
 
 
     // FLUTTER IMPORTANT
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        System.out.println("on ");
-
-//        if (requestCode == PERMISSION_REQUEST_CODE) {
-//            if (grantResults.length > 0
-//                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-//                startServ();
-//            }
-//        }
         try {
             measureService.onRequestPermissionResult(requestCode,permissions,grantResults);
         } catch (Exception e) {
@@ -102,19 +64,6 @@ public class MainActivity extends AppCompatActivity {
             System.out.println("exception: " + e);
         }
     }
-
-
-
-//    // FLUTTER IMPORTANT
-//    private ServiceConnection serviceConnection = new ServiceConnection() {
-//        public void onServiceConnected(ComponentName className, IBinder service) {
-//            locationService = ((BackgroundLocationService.LocationServiceBinder) service).getService();
-//        }
-//
-//        public void onServiceDisconnected(ComponentName className) {
-//            locationService = null;
-//        }
-//    };
 
 
     @Override
@@ -138,10 +87,10 @@ public class MainActivity extends AppCompatActivity {
 
         btnStart.setOnClickListener(v -> {
             try {
-                if(measureService.getMeasureState() == MeasureManager.MeasureState.PAUSED){
-                    measureService.continueMeasure();
-                }else{
+                if(!measureService.getMeasureState().isBinded()){
                     measureService.startMeasure();
+                }else if(!measureService.getMeasureState().isSaveToRepoEnabled()){
+                    measureService.continueMeasure();
                 }
 
             } catch (Exception e) {
@@ -150,11 +99,18 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         btnPause.setOnClickListener(v -> {
-//            if(measureService != null){
-//                System.out.println("============ SERVICE RUNNING: " + measureService.isServiceRunning());
-//                System.out.println("============ SERVICE BINDED: " + measureService.isServiceBinded());
+
+            try {
+                measureService.requestPermissions();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+//            try {
+//                measureService.pauseMeasure();
+//            } catch (Exception e) {
+//                e.printStackTrace();
 //            }
-            measureService.pauseMeasure();
         });
         btnStop.setOnClickListener(v -> {
             try {
@@ -166,8 +122,16 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnGetState.setOnClickListener(v -> {
-            MeasureManager.MeasureState measureState = measureService.getMeasureState();
+
+            MeasureState measureState = measureService.getMeasureState();
             tvStatus.setText(measureState.toString());
+            try {
+                int size = measureService.getMeasureLocationsRepository().getAllLocations().size();
+                Toast.makeText(this,"Locations stored count: " + size, Toast.LENGTH_SHORT).show();
+            }catch(Exception ex){
+                System.out.println(ex);
+            }
+
         });
     }
 }

@@ -13,4 +13,5 @@ public interface LocationRepositoryI {
     public List<Location> getAllLocationWhereTimeBiggerThan(long time);
 
     public void clearAll();
+
 }

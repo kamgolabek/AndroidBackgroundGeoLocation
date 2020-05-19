@@ -8,6 +8,10 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.IBinder;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import androidx.annotation.NonNull;
@@ -20,19 +24,12 @@ import static android.Manifest.permission.ACCESS_FINE_LOCATION;
  */
 public class MeasureManager {
 
-    public enum MeasureState {
-        RUNNING_NOT_BINDED, RUNNING, PAUSED, PAUSED_NOT_BINDED, STOPPED
-    }
 
-    enum PermissionStatus {
-        NOT_REQUESTED,GRANTED,NOT_GRANTED;
-    }
+//    private static final List<String> PERMISSIONS_LIST = Collections.singletonList(ACCESS_FINE_LOCATION);
 
     private static final int PERMISSION_REQUEST_CODE = 100;
 
     private final Activity activity;
-
-    private PermissionStatus permissionStatus = PermissionStatus.NOT_REQUESTED;
 
     private Optional<BackgroundLocationService> bgLocationService = Optional.empty();
 
@@ -66,44 +63,35 @@ public class MeasureManager {
      * @throws Exception
      */
     public void onRequestPermissionResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) throws Exception {
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                permissionStatus = PermissionStatus.GRANTED;
-            }else{
-                permissionStatus = PermissionStatus.NOT_GRANTED;
-            }
-            activate();
-        }
+//        if (requestCode == PERMISSION_REQUEST_CODE) {
+//            if (grantResults.length > 0
+//                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+//                permissionStatus = PermissionStatus.GRANTED;
+//            }else{
+//                permissionStatus = PermissionStatus.NOT_GRANTED;
+//            }
+////            activate();
+//        }
     }
 
     // ---------- public interface methods -------------
 
-    public MeasureState getMeasureState(){
+    /**
+     * When measure is paused, but app closed, then on reopen I see service running, but not binded
+     * and in order to know if service is actually savign to repo, i have to run it.. nonsense.. !!!
+     * Need to get real information about saving to repo...
+     * @return
+     */
 
+    public MeasureState getMeasureState(){
         boolean serviceRunning = isServiceRunning();
         boolean serviceBinded = isServiceBinded();
-        boolean saveToRepo = bgLocationService.isPresent() ? bgLocationService.get().isSaveToRepo() : false;
+        boolean saveToRepo = isSavingToRepoEnabled();
+        int positionsStored = bgLocationService.map(backgroundLocationService ->
+                backgroundLocationService.getLocationRepository().getAllLocations().size())
+                .orElse(-1);
 
-        if(serviceRunning){
-
-            if(!serviceBinded && !saveToRepo){
-                return MeasureState.PAUSED_NOT_BINDED;
-            }
-
-            if(!serviceBinded){
-                return MeasureState.RUNNING_NOT_BINDED;
-            }
-
-            if(!saveToRepo){
-                return MeasureState.PAUSED;
-            }
-
-            return MeasureState.RUNNING;
-
-        }else{
-            return MeasureState.STOPPED;
-        }
+        return new MeasureState(serviceRunning, serviceBinded, saveToRepo, readMeasureData(), arePermissionsGranted(), positionsStored);
     }
 
 
@@ -121,9 +109,11 @@ public class MeasureManager {
     /**
      * This method should just stop GPS listener (no positions receiving from GPS - no storing)
      */
-    public void pauseMeasure(){
+    public void pauseMeasure() throws Exception {
+        if(!bgLocationService.isPresent()) {
+            throw new Exception("Not binded to service !");
+        }
         bgLocationService.get().setSaveToRepo(false);
-
     }
 
     /**
@@ -141,16 +131,25 @@ public class MeasureManager {
 
     }
 
-    public InMemoryLocationRepository getMeasureLocationsRepository(){
+    public InMemoryLocationRepository getMeasureLocationsRepository() throws Exception {
+        if(!bgLocationService.isPresent()) {
+            throw new Exception("Not binded to service !");
+        }
         return bgLocationService.get().getLocationRepository();
     }
 
-    public void readMeasureData(){
-
+    public Map<String, Object> readMeasureData(){
+        return BackgroundLocationService.metadata;
     }
 
-    public void setMeasureData(){
+    public void setMeasureData(Map<String,Object> metadata) throws Exception {
+        BackgroundLocationService.metadata = metadata;
+    }
 
+    public void requestPermissions() throws Exception {
+        if (activity.checkSelfPermission(ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
+            activity.requestPermissions( new String[]{ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
+        }
     }
 
     public void onActivityDestroy(){
@@ -169,13 +168,14 @@ public class MeasureManager {
         return BackgroundLocationService.isServiceRunning;
     }
 
+    private boolean isSavingToRepoEnabled(){
+        return BackgroundLocationService.isSavingToRepoEnabled;
+    }
+
     private boolean isServiceBinded(){
         return isServiceBinded;
     }
 
-    private boolean arePermissionsGranted(){
-        return permissionStatus == PermissionStatus.GRANTED;
-    }
 
 
     /**
@@ -206,12 +206,7 @@ public class MeasureManager {
         bgLocationService = Optional.of(service);
         isServiceBinded = true;
 
-        if(bgLocationService.get().isLocationTrackignEnabled()){
-            System.out.println("location tracking enabled before we start tracking..");
-        }else {
-            bgLocationService.get().startLocationTracking(gpsUpdateIntervalMillis, gpsUpdateMinDistanceMeters);
-        }
-
+        bgLocationService.get().startLocationTracking(gpsUpdateIntervalMillis, gpsUpdateMinDistanceMeters);
     }
 
     /**
@@ -222,13 +217,10 @@ public class MeasureManager {
     private void activate() throws Exception {
         System.out.println("try to activate service");
         if(!bgLocationService.isPresent()){
-            if(permissionStatus == PermissionStatus.NOT_GRANTED){
-                throw new Exception("Permissions not granted by user!");
-            }else if(permissionStatus == PermissionStatus.NOT_REQUESTED){
-                requestPermissions();
-            }else if(permissionStatus == PermissionStatus.GRANTED){
-                startBackgroundLocationService();
+            if(!arePermissionsGranted()) {
+                throw new Exception("Permissions not granted !");
             }
+            startBackgroundLocationService();
         }else{
             throw new Exception("Already activated!");
         }
@@ -247,15 +239,11 @@ public class MeasureManager {
         }
     }
 
-    private void requestPermissions() throws Exception {
-        System.out.println("requesting permission");
-        if (activity.checkSelfPermission( ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
-           permissionStatus = PermissionStatus.GRANTED;
-           activate();
-        }else{
-            activity.requestPermissions( new String[]{ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
-        }
+    private boolean arePermissionsGranted(){
+        return activity.checkSelfPermission( ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
+
+
 
 
 
@@ -283,6 +271,7 @@ public class MeasureManager {
 
     private ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
+            System.out.println("service binded");
             onServiceBinded(((BackgroundLocationService.LocationServiceBinder) service).getService());
         }
 

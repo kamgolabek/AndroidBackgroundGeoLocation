@@ -6,6 +6,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.widget.Toast;
 
 import java.util.function.Consumer;
 
@@ -24,6 +25,15 @@ public class LocationListenerImpl implements LocationListener {
 
     @SuppressLint("MissingPermission")
     public void startListening(int intervalMillis, int minDistanceMeter) {
+        System.out.println("start listening");
+
+        if(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)){
+            Toast.makeText(ctx,"GPS ENABLED", Toast.LENGTH_SHORT).show();
+        }else {
+            Toast.makeText(ctx,"GPS NOT ENABLED", Toast.LENGTH_SHORT).show();
+        }
+
+
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, intervalMillis, minDistanceMeter, this);
     }
 
